@@ -1,4 +1,3 @@
-#include <rfb/rfb.h>
 #include <getopt.h>
 #include <math.h>
 #include <stdarg.h>
@@ -14,15 +13,16 @@
 #include "raw-serial.h"
 //#include "sdl-ps2.h"
 //#include "sdl-clipboard.h"
+#include <rfb/rfb.h>
+#include <rfb/keysym.h>
 
 #define CPU_HZ 25000000
 #define FPS 60
 
-//static uint32_t BLACK = 0x657b83, WHITE = 0xfdf6e3;
+static uint32_t BLACK = 0x657b83, WHITE = 0xfdf6e3;
 //static uint32_t BLACK = 0x000000, WHITE = 0xFFFFFF;
 //static uint32_t BLACK = 0x0000FF, WHITE = 0xFFFF00;
 //static uint32_t BLACK = 0x000000, WHITE = 0x00FF00;
-static uint32_t BLACK = 0x00000000, WHITE = 0x000000FF;
 
 #define MAX_HEIGHT 768
 #define MAX_WIDTH  1024
@@ -34,6 +34,8 @@ static void show_leds(const struct RISC_LED *leds, uint32_t value);
 // static double scale_display(SDL_Window *window, const SDL_Rect *risc_rect, SDL_Rect *display_rect);
 //static void update_texture(struct RISC *risc, SDL_Texture *texture, const SDL_Rect *risc_rect, bool color);
 static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color);
+static void doptr(int buttonMask,int x,int y,rfbClientPtr cl);
+static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl);
 
 enum Action {
   ACTION_OBERON_INPUT,
@@ -105,8 +107,11 @@ static void usage() {
   exit(1);
 }
 
+static struct RISC *risc;
+
 int main (int argc, char *argv[]) {
-  struct RISC *risc = risc_new();
+  //struct RISC *risc = risc_new();
+  risc = risc_new();
   risc_set_serial(risc, &pclink);
 //  risc_set_clipboard(risc, &sdl_clipboard);
 
@@ -271,16 +276,16 @@ int main (int argc, char *argv[]) {
 //  SDL_RenderPresent(renderer);
 
   int maxx=MAX_WIDTH; int maxy=MAX_HEIGHT;
-  int bpp=1;
+  int bpp=4;
   
   rfbScreenInfoPtr rfbScreen = rfbGetScreen(&argc,argv,maxx,maxy,8,3,bpp);
   if(!rfbScreen)
     return 0;
   rfbScreen->desktopName = "Oberon RISC Emulator";
   rfbScreen->frameBuffer = (char*)malloc(maxx*maxy*bpp);
-  //rfbScreen->alwaysShared = TRUE;
-  //rfbScreen->ptrAddEvent = doptr;
-  //rfbScreen->kbdAddEvent = dokey;
+  rfbScreen->alwaysShared = TRUE;
+  rfbScreen->ptrAddEvent = doptr;
+  rfbScreen->kbdAddEvent = dokey;
   //rfbScreen->newClientHook = newclient;
   
   /* initialize the server */
@@ -408,8 +413,6 @@ int main (int argc, char *argv[]) {
     if (delay > 0) {
 //      SDL_Delay(delay);
     }
-
-    rfbMarkRectAsModified(rfbScreen,0,0,maxx,maxy);
           
     long usec = rfbScreen->deferUpdateTime*1000;
     rfbProcessEvents(rfbScreen,usec);
@@ -554,16 +557,44 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
        }
      }
    }
-//    for (int line = MAX_HEIGHT-1; line >= 0; line--) {
-//      int line_start = line * (MAX_WIDTH / (color ? 8 : 32));
-//      for (int col = 0; col <= MAX_WIDTH / 32; col++) {
-//        uint32_t pixels = in[line_start + col];
-//        for (int b = 0; b < 32; b++) {
-//          // printf("%d,%d\n", col*32+b, line);
-//          rfbDrawPixel(screen, col*32+b, line, (pixels & 1) ? WHITE : BLACK);
-//          pixels >>=1;
-//        }
-//      }
-//    }
+   rfbMarkRectAsModified(screen, damage.x1 * (color ? 8 : 32), damage.y1,
+                                    damage.x2 * (color ? 8 : 32), damage.y2);
+
   }  
+}
+
+
+static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
+{
+
+   if(x>=0 && y>=0 && x<MAX_WIDTH && y<MAX_HEIGHT) {
+      
+      // Tell emulator about mouse moving
+      risc_mouse_moved(risc, x, MAX_HEIGHT - y - 1);
+      
+   }
+   rfbDefaultPtrAddEvent(buttonMask,x,y,cl);
+}
+
+static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
+{
+  if(down) {
+    if(key==XK_Escape)
+      rfbCloseClient(cl);
+    else if(key==XK_q)
+      /* close down server, disconnecting clients */
+      rfbShutdownServer(cl->screen,TRUE);
+  }
+  /* Fake Mouse buttons */
+  if(key==XK_Control_L)
+    risc_mouse_button(risc, 1, down);
+  else if(key==XK_Alt_L)
+    risc_mouse_button(risc, 2, down);
+  else if(key==XK_Super_L)
+    risc_mouse_button(risc, 3, down);
+    // } else if(key>=' ' && key<0x100) {
+      // uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
+      // int len = ps2_encode(key, down, ps2_bytes);
+      // risc_keyboard_input(risc, ps2_bytes, len);
+    //}
 }
