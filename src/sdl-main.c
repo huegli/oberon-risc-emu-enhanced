@@ -1,4 +1,6 @@
 #include <SDL.h>
+#include <rfb/rfb.h>
+#include <rfb/keysym.h>
 #include <getopt.h>
 #include <math.h>
 #include <stdarg.h>
@@ -32,6 +34,9 @@ static enum Action map_keyboard_event(SDL_KeyboardEvent *event);
 static void show_leds(const struct RISC_LED *leds, uint32_t value);
 static double scale_display(SDL_Window *window, const SDL_Rect *risc_rect, SDL_Rect *display_rect);
 static void update_texture(struct RISC *risc, SDL_Texture *texture, const SDL_Rect *risc_rect, bool color);
+static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color);
+static void doptr(int buttonMask,int x,int y,rfbClientPtr cl);
+static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl);
 
 enum Action {
   ACTION_OBERON_INPUT,
@@ -73,6 +78,8 @@ static struct option long_options[] = {
   { "boot-from-serial", no_argument,       NULL, 'S' },
   { "color",            no_argument,       NULL, 'c' },
   { "hostfs",           required_argument, NULL, 'H' },
+  { "vnc",              no_argument,       NULL, 'v' },
+  { "headless",         no_argument,       NULL, 'h' },
   { NULL,               no_argument,       NULL, 0   }
 };
 
@@ -99,14 +106,22 @@ static void usage() {
        "  --serial-in FILE      Read serial input from FILE\n"
        "  --serial-out FILE     Write serial output to FILE\n"
        "  --hostfs DIRECTORY    Use DIRECTORY as HostFS directory\n"
+       "  --vnc                 Set up VNC server for display access\n"
+       "  --headless.           Disable display (impliess --vnc)\n"
        );
   exit(1);
 }
 
+/* make global as VNC keyboard and mouse handlers require it */
+static struct RISC *risc;
+static SDL_Rect risc_rect;
+
 int main (int argc, char *argv[]) {
-  struct RISC *risc = risc_new();
+  risc = risc_new();
   risc_set_serial(risc, &pclink);
   risc_set_clipboard(risc, &sdl_clipboard);
+
+  rfbScreenInfoPtr rfbScreen = NULL;
 
   struct RISC_LED leds = {
     .write = show_leds
@@ -114,18 +129,20 @@ int main (int argc, char *argv[]) {
 
   bool fullscreen = false;
   double zoom = 0;
-  SDL_Rect risc_rect = {
-    .w = RISC_FRAMEBUFFER_WIDTH,
-    .h = RISC_FRAMEBUFFER_HEIGHT
-  };
+  
+  risc_rect.w = RISC_FRAMEBUFFER_WIDTH;
+  risc_rect.h = RISC_FRAMEBUFFER_HEIGHT;
+  
   bool size_option = false, rtc_option = false, color_option = false;
   int mem_option = 0;
   const char *serial_in = NULL;
   const char *serial_out = NULL;
   bool boot_from_serial = false;
-
+  bool use_VNC = false;
+  bool use_SDL = true;
+  
   int opt;
-  while ((opt = getopt_long(argc, argv, "z:fLrm:s:I:O:ScH:", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "z:fLrm:s:I:O:ScHvh:", long_options, NULL)) != -1) {
     switch (opt) {
       case 'z': {
         double x = strtod(optarg, 0);
@@ -183,6 +200,15 @@ int main (int argc, char *argv[]) {
         risc_set_host_fs(risc, host_fs_new(optarg));
         break;
       }
+      case 'v': {
+        use_VNC = true;
+        break;
+      }
+      case 'h': {
+        use_VNC = true;
+        use_SDL = false;
+        break;
+      }
       default: {
         usage();
       }
@@ -212,60 +238,86 @@ int main (int argc, char *argv[]) {
     risc_set_serial(risc, raw_serial_new(serial_in, serial_out));
   }
 
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-    fail(1, "Unable to initialize SDL: %s", SDL_GetError());
-  }
-  atexit(SDL_Quit);
-  SDL_EnableScreenSaver();
-  SDL_ShowCursor(false);
-  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
-
-  int window_flags = SDL_WINDOW_HIDDEN;
-  int display = 0;
-  if (fullscreen) {
-    window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-    display = best_display(&risc_rect);
-  }
-  if (zoom == 0) {
-    SDL_Rect bounds;
-    if (SDL_GetDisplayBounds(display, &bounds) == 0 &&
-        bounds.h >= risc_rect.h * 2 && bounds.w >= risc_rect.w * 2) {
-      zoom = 2;
-    } else {
-      zoom = 1;
-    }
-  }
-  SDL_Window *window = SDL_CreateWindow("Project Oberon",
-                                        SDL_WINDOWPOS_UNDEFINED_DISPLAY(display),
-                                        SDL_WINDOWPOS_UNDEFINED_DISPLAY(display),
-                                        (int)(risc_rect.w * zoom),
-                                        (int)(risc_rect.h * zoom),
-                                        window_flags);
-  if (window == NULL) {
-    fail(1, "Could not create window: %s", SDL_GetError());
-  }
-
-  SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
-  if (renderer == NULL) {
-    fail(1, "Could not create renderer: %s", SDL_GetError());
-  }
-
-  SDL_Texture *texture = SDL_CreateTexture(renderer,
-                                           SDL_PIXELFORMAT_ARGB8888,
-                                           SDL_TEXTUREACCESS_STREAMING,
-                                           risc_rect.w,
-                                           risc_rect.h);
-  if (texture == NULL) {
-    fail(1, "Could not create texture: %s", SDL_GetError());
-  }
-
+  /* Define and set these to NULL here even if not used */
+  SDL_Window *window = NULL;
+  SDL_Renderer *renderer = NULL;
+  SDL_Texture *texture = NULL;
   SDL_Rect display_rect;
-  double display_scale = scale_display(window, &risc_rect, &display_rect);
-  update_texture(risc, texture, &risc_rect, color_option);
-  SDL_ShowWindow(window);
-  SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, texture, &risc_rect, &display_rect);
-  SDL_RenderPresent(renderer);
+  double display_scale;
+  
+  if (use_SDL) {
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+      fail(1, "Unable to initialize SDL: %s", SDL_GetError());
+    }
+    atexit(SDL_Quit);
+    SDL_EnableScreenSaver();
+    SDL_ShowCursor(false);
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
+
+    int window_flags = SDL_WINDOW_HIDDEN;
+    int display = 0;
+    if (fullscreen) {
+      window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+      display = best_display(&risc_rect);
+    }
+    if (zoom == 0) {
+      SDL_Rect bounds;
+      if (SDL_GetDisplayBounds(display, &bounds) == 0 &&
+        bounds.h >= risc_rect.h * 2 && bounds.w >= risc_rect.w * 2) {
+        zoom = 2;
+      } else {
+        zoom = 1;
+      }
+    }
+    window = SDL_CreateWindow("Project Oberon",
+                              SDL_WINDOWPOS_UNDEFINED_DISPLAY(display),
+                              SDL_WINDOWPOS_UNDEFINED_DISPLAY(display),
+                              (int)(risc_rect.w * zoom),
+                              (int)(risc_rect.h * zoom),
+                              window_flags);
+    if (window == NULL) {
+      fail(1, "Could not create window: %s", SDL_GetError());
+    }
+
+    renderer = SDL_CreateRenderer(window, -1, 0);
+    if (renderer == NULL) {
+      fail(1, "Could not create renderer: %s", SDL_GetError());
+    }
+
+    texture = SDL_CreateTexture(renderer,
+                                SDL_PIXELFORMAT_ARGB8888,
+                                SDL_TEXTUREACCESS_STREAMING,
+                                risc_rect.w,
+                                risc_rect.h);
+    if (texture == NULL) {
+      fail(1, "Could not create texture: %s", SDL_GetError());
+    }
+
+    
+    display_scale = scale_display(window, &risc_rect, &display_rect);
+    update_texture(risc, texture, &risc_rect, color_option);
+    SDL_ShowWindow(window);
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, &risc_rect, &display_rect);
+    SDL_RenderPresent(renderer);
+  }
+  
+  if (use_VNC) {
+   
+    rfbScreen = rfbGetScreen(&argc,argv,risc_rect.w,risc_rect.h,8,3,4);
+    
+    if(!rfbScreen)
+      fail(1, "Could not create VNC server");
+    
+    rfbScreen->desktopName = "Oberon RISC Emulator";
+    rfbScreen->frameBuffer = (char*)malloc(risc_rect.w*risc_rect.h*4);
+    rfbScreen->alwaysShared = TRUE;
+    rfbScreen->ptrAddEvent = doptr;
+    rfbScreen->kbdAddEvent = dokey;
+  
+    /* initialize the server */
+    rfbInitServer(rfbScreen);
+  }
 
   bool done = false;
   bool mouse_was_offscreen = false;
@@ -281,7 +333,7 @@ int main (int argc, char *argv[]) {
         }
 
         case SDL_WINDOWEVENT: {
-          if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+          if (use_SDL && (event.window.event == SDL_WINDOWEVENT_RESIZED)) {
             display_scale = scale_display(window, &risc_rect, &display_rect);
           }
           break;
@@ -307,13 +359,20 @@ int main (int argc, char *argv[]) {
         }
 
         case SDL_MOUSEMOTION: {
-          int scaled_x = (int)round((event.motion.x - display_rect.x) / display_scale);
-          int scaled_y = (int)round((event.motion.y - display_rect.y) / display_scale);
+          int scaled_x, scaled_y;
+          if (use_SDL) {
+            scaled_x = (int)round((event.motion.x - display_rect.x) / display_scale);
+            scaled_y = (int)round((event.motion.y - display_rect.y) / display_scale);
+          } else {
+            scaled_x = event.motion.x;
+            scaled_y = event.motion.y;
+          }
           int x = clamp(scaled_x, 0, risc_rect.w - 1);
           int y = clamp(scaled_y, 0, risc_rect.h - 1);
           bool mouse_is_offscreen = x != scaled_x || y != scaled_y;
           if (mouse_is_offscreen != mouse_was_offscreen) {
-            SDL_ShowCursor(mouse_is_offscreen);
+            if (use_SDL)
+              SDL_ShowCursor(mouse_is_offscreen);
             mouse_was_offscreen = mouse_is_offscreen;
           }
           risc_mouse_moved(risc, x, risc_rect.h - y - 1);
@@ -336,6 +395,7 @@ int main (int argc, char *argv[]) {
               break;
             }
             case ACTION_TOGGLE_FULLSCREEN: {
+              if (!use_SDL) break;
               fullscreen ^= true;
               if (fullscreen) {
                 SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
@@ -370,14 +430,23 @@ int main (int argc, char *argv[]) {
         }
       }
     }
-
+    
     risc_set_time(risc, frame_start);
     risc_run(risc, CPU_HZ / FPS);
 
-    update_texture(risc, texture, &risc_rect, color_option);
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, &risc_rect, &display_rect);
-    SDL_RenderPresent(renderer);
+    if (use_SDL) {
+      update_texture(risc, texture, &risc_rect, color_option);
+      SDL_RenderClear(renderer);
+      SDL_RenderCopy(renderer, texture, &risc_rect, &display_rect);
+      SDL_RenderPresent(renderer);
+    }
+
+    if (use_VNC) {
+      update_rfb(risc, rfbScreen, color_option);
+      rfbProcessEvents(rfbScreen,rfbScreen->deferUpdateTime*1000);
+      if (!rfbIsActive(rfbScreen))
+        done = true;
+    }    
 
     uint32_t frame_end = SDL_GetTicks();
     int delay = frame_start + 1000/FPS - frame_end;
@@ -497,4 +566,61 @@ static void update_texture(struct RISC *risc, SDL_Texture *texture, const SDL_Re
     };
     SDL_UpdateTexture(texture, &rect, pixel_buf, rect.w * 4);
   }
+}
+
+static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
+  struct Damage damage = risc_get_framebuffer_damage(risc);
+  if (damage.y1 <= damage.y2) {
+    uint32_t *in = risc_get_framebuffer_ptr(risc);
+    uint32_t *pal = color ? risc_get_palette_ptr(risc) : NULL;
+
+   for (int line = damage.y2; line >= damage.y1; line--) {
+     int line_start = line * (risc_rect.w / (color ? 8 : 32));
+     for (int col = damage.x1; col <= damage.x2; col++) {
+       uint32_t pixels = in[line_start + col];
+       if (color) {
+         for (int b = 0; b < 8; b++) {
+           rfbDrawPixel(screen, col*8+b, line , pal[pixels & 0xF]);
+           pixels >>= 4;
+         }
+       } else {
+         for (int b = 0; b < 32; b++) {
+           rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? WHITE : BLACK);
+           pixels >>= 1;
+         }
+       }
+     }
+   }
+   rfbMarkRectAsModified(screen, damage.x1 * (color ? 8 : 32), damage.y1,
+                                 damage.x2 * (color ? 8 : 32), damage.y2);
+
+  }  
+}
+
+
+static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
+{
+
+   if(x>=0 && y>=0 && x<risc_rect.w && y<risc_rect.h) {
+      risc_mouse_moved(risc, x, risc_rect.h - y - 1);      
+   }
+   rfbDefaultPtrAddEvent(buttonMask,x,y,cl);
+}
+
+static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
+{
+  if(down) {
+    if(key==XK_Escape)
+      rfbCloseClient(cl);
+    else if(key==XK_q)
+      /* close down server, disconnecting clients */
+      rfbShutdownServer(cl->screen,TRUE);
+  }
+  /* Fake Mouse buttons */
+  if(key==XK_Control_L)
+    risc_mouse_button(risc, 1, down);
+  else if(key==XK_Alt_L)
+    risc_mouse_button(risc, 2, down);
+  else if(key==XK_Super_L)
+    risc_mouse_button(risc, 3, down);
 }
