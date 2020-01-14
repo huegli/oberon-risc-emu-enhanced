@@ -1,4 +1,5 @@
-CFLAGS = -g -Os -Wall -Wextra -Wconversion -Wno-sign-conversion -Wno-unused-parameter
+# CFLAGS = -g -Os -Wall -Wextra -Wconversion -Wno-sign-conversion -Wno-unused-parameter
+CFLAGS = -ggdb -Wall -Wextra -Wconversion -Wno-sign-conversion -Wno-unused-parameter
 SDL2_CONFIG = sdl2-config
 
 RISC_CFLAGS = $(CFLAGS) -std=c99 `$(SDL2_CONFIG) --cflags --libs` -lm -lvncserver
@@ -6,6 +7,7 @@ RISC_CFLAGS = $(CFLAGS) -std=c99 `$(SDL2_CONFIG) --cflags --libs` -lm -lvncserve
 RISC_SOURCE = \
 	src/sdl-main.c \
 	src/sdl-ps2.c src/sdl-ps2.h \
+	src/rfb-ps2.c src/rfb-ps2.h \
 	src/risc.c src/risc.h src/risc-boot.inc \
 	src/risc-fp.c src/risc-fp.h \
 	src/disk.c src/disk.h \

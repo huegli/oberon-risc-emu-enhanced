@@ -16,6 +16,7 @@
 #include "raw-serial.h"
 #include "sdl-ps2.h"
 #include "sdl-clipboard.h"
+#include "rfb-ps2.h"
 
 #define CPU_HZ 25000000
 #define FPS 60
@@ -616,6 +617,11 @@ static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
       /* close down server, disconnecting clients */
       rfbShutdownServer(cl->screen,TRUE);
   }
+  
+  uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
+  int len = rfb_ps2_encode(key, down, ps2_bytes);
+  risc_keyboard_input(risc, ps2_bytes, len);
+
   /* Fake Mouse buttons */
   if(key==XK_Control_L)
     risc_mouse_button(risc, 1, down);
