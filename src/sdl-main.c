@@ -22,9 +22,6 @@
 #define FPS 60
 
 static uint32_t BLACK = 0x657b83, WHITE = 0xfdf6e3;
-// Reverse RGB for VNC
-static uint32_t BLACK_RFB = 0x837b65, WHITE_RFB = 0xe3f6fd;
-
 //static uint32_t BLACK = 0x000000, WHITE = 0xFFFFFF;
 //static uint32_t BLACK = 0x0000FF, WHITE = 0xFFFF00;
 //static uint32_t BLACK = 0x000000, WHITE = 0x00FF00;
@@ -589,7 +586,7 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
          }
        } else {
          for (int b = 0; b < 32; b++) {
-           rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? WHITE_RFB : BLACK_RFB);
+           rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? Swap24(WHITE) : Swap24(BLACK));
            pixels >>= 1;
          }
        }
