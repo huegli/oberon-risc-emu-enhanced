@@ -571,10 +571,19 @@ static void update_texture(struct RISC *risc, SDL_Texture *texture, const SDL_Re
 
 static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
   struct Damage damage = risc_get_framebuffer_damage(risc);
+  
   if (damage.y1 <= damage.y2) {
     uint32_t *in = risc_get_framebuffer_ptr(risc);
     uint32_t *pal = color ? risc_get_palette_ptr(risc) : NULL;
 
+   int rowstride = screen->paddedWidthInBytes;
+   int bpp = screen->serverFormat.bitsPerPixel/8;
+
+   int fbx1 = damage.x1 * (color ? 8 : 32);
+   int fbx2 = damage.x2 * (color ? 8 : 32) + (color ? 8 : 32) - 1;
+   int fby1 = risc_rect.h - damage.y1 - 1;
+   int fby2 = risc_rect.h - damage.y2 - 1;
+   
    for (int line = damage.y2; line >= damage.y1; line--) {
      int line_start = line * (risc_rect.w / (color ? 8 : 32));
      for (int col = damage.x1; col <= damage.x2; col++) {
@@ -586,14 +595,16 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
          }
        } else {
          for (int b = 0; b < 32; b++) {
-           rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? Swap24(WHITE) : Swap24(BLACK));
+           // rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? Swap24(WHITE) : Swap24(BLACK));
+           uint32_t colorbuf = (pixels & 0x1) ? Swap24(WHITE) : Swap24(BLACK);
+           memcpy(screen->frameBuffer+(risc_rect.h - line -1)*rowstride+(col*32+b)*bpp,&colorbuf,bpp);
+           // screen->frameBuffer[(risc_rect.h - line -1)*rowstride+(col*32+b)*bpp] = (pixels & 0x1) ? Swap24(WHITE) : Swap24(BLACK);
            pixels >>= 1;
          }
        }
      }
    }
-   rfbMarkRectAsModified(screen, damage.x1 * (color ? 8 : 32), damage.y1,
-                                 damage.x2 * (color ? 8 : 32), damage.y2);
+   rfbMarkRectAsModified(screen, fbx1, fby1, fbx2, fby2);
 
   }  
 }
