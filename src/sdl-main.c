@@ -434,7 +434,7 @@ int main (int argc, char *argv[]) {
     
     risc_set_time(risc, frame_start);
     risc_run(risc, CPU_HZ / FPS);
-
+    
     if (use_SDL) {
       update_texture(risc, texture, &risc_rect, color_option);
       SDL_RenderClear(renderer);
@@ -454,6 +454,10 @@ int main (int argc, char *argv[]) {
     if (delay > 0) {
       SDL_Delay(delay);
     }
+#if 0
+    if (delay < 10)
+       printf("%x - %x: Ticks spent: %d Delay: %d\n", frame_start, frame_end, frame_end-frame_start, delay);
+#endif
   }
   return 0;
 }
@@ -592,8 +596,8 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
        }
      }
    }
-   rfbMarkRectAsModified(screen, damage.x1 * (color ? 8 : 32), damage.y1,
-                                 damage.x2 * (color ? 8 : 32), damage.y2);
+   // rfbMarkRectAsModified(screen, damage.x1 * (color ? 8 : 32), damage.y1,
+   //                              damage.x2 * (color ? 8 : 32), damage.y2);
 
   }  
 }
@@ -618,9 +622,6 @@ static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
       rfbShutdownServer(cl->screen,TRUE);
   }
   
-  uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
-  int len = rfb_ps2_encode(key, down, ps2_bytes);
-  risc_keyboard_input(risc, ps2_bytes, len);
 
   /* Fake Mouse buttons */
   if(key==XK_Control_L)
@@ -629,4 +630,9 @@ static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
     risc_mouse_button(risc, 2, down);
   else if(key==XK_Super_L)
     risc_mouse_button(risc, 3, down);
+  else {
+    uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
+    int len = rfb_ps2_encode(key, down, ps2_bytes);
+    risc_keyboard_input(risc, ps2_bytes, len);
+  }
 }
