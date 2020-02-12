@@ -315,7 +315,9 @@ int main (int argc, char *argv[]) {
     rfbScreen->alwaysShared = TRUE;
     rfbScreen->ptrAddEvent = doptr;
     rfbScreen->kbdAddEvent = dokey;
-  
+    //rfbScreen->deferUpdateTime = 5000;
+    printf("DeferUpdateTime: %d\n", rfbScreen->deferUpdateTime);
+    
     /* initialize the server */
     rfbInitServer(rfbScreen);
   }
@@ -617,9 +619,13 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
 
 static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
 {
-
+   // static int throttle = 0;
+   
    if(x>=0 && y>=0 && x<risc_rect.w && y<risc_rect.h) {
-      risc_mouse_moved(risc, x, risc_rect.h - y - 1);      
+      //if (throttle++ > 100) {
+        risc_mouse_moved(risc, x, risc_rect.h - y - 1);      
+      //  throttle = 0;
+      //}
    }
 }
 
