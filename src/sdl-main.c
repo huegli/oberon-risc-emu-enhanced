@@ -444,7 +444,7 @@ int main (int argc, char *argv[]) {
 
     if (use_VNC) {
       update_rfb(risc, rfbScreen, color_option);
-      rfbProcessEvents(rfbScreen,rfbScreen->deferUpdateTime*1000);
+      rfbProcessEvents(rfbScreen,-1);
       if (!rfbIsActive(rfbScreen))
         done = true;
     }    
@@ -595,10 +595,11 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
          }
        } else {
          for (int b = 0; b < 32; b++) {
+           // Clean:
            // rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? Swap24(WHITE) : Swap24(BLACK));
+		   // Creates artifacts
            uint32_t colorbuf = (pixels & 0x1) ? Swap24(WHITE) : Swap24(BLACK);
-           memcpy(screen->frameBuffer+(risc_rect.h - line -1)*rowstride+(col*32+b)*bpp,&colorbuf,bpp);
-           // screen->frameBuffer[(risc_rect.h - line -1)*rowstride+(col*32+b)*bpp] = (pixels & 0x1) ? Swap24(WHITE) : Swap24(BLACK);
+           memcpy(screen->frameBuffer+(risc_rect.h - line - 1)*rowstride+(col*32+b)*bpp,&colorbuf,bpp);
            pixels >>= 1;
          }
        }
@@ -616,7 +617,6 @@ static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
    if(x>=0 && y>=0 && x<risc_rect.w && y<risc_rect.h) {
       risc_mouse_moved(risc, x, risc_rect.h - y - 1);      
    }
-   rfbDefaultPtrAddEvent(buttonMask,x,y,cl);
 }
 
 static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
