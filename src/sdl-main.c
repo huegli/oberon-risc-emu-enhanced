@@ -315,9 +315,7 @@ int main (int argc, char *argv[]) {
     rfbScreen->alwaysShared = TRUE;
     rfbScreen->ptrAddEvent = doptr;
     rfbScreen->kbdAddEvent = dokey;
-    //rfbScreen->deferUpdateTime = 5000;
-    printf("DeferUpdateTime: %d\n", rfbScreen->deferUpdateTime);
-    
+    rfbScreen->handleEventsEagerly = TRUE; // need this for good mouse cursor performance 
     /* initialize the server */
     rfbInitServer(rfbScreen);
   }
@@ -586,8 +584,8 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
    int bpp = screen->serverFormat.bitsPerPixel/8;
 
    int fbx1 = damage.x1 * (color ? 8 : 32);
-   int fbx2 = damage.x2 * (color ? 8 : 32) + (color ? 8 : 32) - 1;
-   int fby1 = risc_rect.h - damage.y1 - 1;
+   int fbx2 = damage.x2 * (color ? 8 : 32) + (color ? 8 : 32);
+   int fby1 = risc_rect.h - damage.y1;
    int fby2 = risc_rect.h - damage.y2 - 1;
    
    for (int line = damage.y2; line >= damage.y1; line--) {
@@ -601,9 +599,6 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
          }
        } else {
          for (int b = 0; b < 32; b++) {
-           // Clean:
-           // rfbDrawPixel(screen, col*32+b, risc_rect.h - line - 1, (pixels & 1) ? Swap24(WHITE) : Swap24(BLACK));
-		   // Creates artifacts
            uint32_t colorbuf = (pixels & 0x1) ? Swap24(WHITE) : Swap24(BLACK);
            memcpy(screen->frameBuffer+(risc_rect.h - line - 1)*rowstride+(col*32+b)*bpp,&colorbuf,bpp);
            pixels >>= 1;
@@ -619,13 +614,8 @@ static void update_rfb(struct RISC *risc, rfbScreenInfoPtr screen, bool color) {
 
 static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
 {
-   // static int throttle = 0;
-   
    if(x>=0 && y>=0 && x<risc_rect.w && y<risc_rect.h) {
-      //if (throttle++ > 100) {
-        risc_mouse_moved(risc, x, risc_rect.h - y - 1);      
-      //  throttle = 0;
-      //}
+      risc_mouse_moved(risc, x, risc_rect.h - y - 1);
    }
 }
 
@@ -641,11 +631,11 @@ static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
   
 
   /* Fake Mouse buttons */
-  if(key==XK_Control_L)
+  if((key==XK_Control_L) || (key==XK_a))
     risc_mouse_button(risc, 1, down);
-  else if(key==XK_Alt_L)
+  else if((key==XK_Alt_L) || (key==XK_o))
     risc_mouse_button(risc, 2, down);
-  else if(key==XK_Super_L)
+  else if((key==XK_Super_L) || (key==XK_e))
     risc_mouse_button(risc, 3, down);
   else {
     uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
