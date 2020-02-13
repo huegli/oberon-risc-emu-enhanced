@@ -621,21 +621,34 @@ static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
 
 static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
 {
+  static bool Control_down = false;
+  static bool Shift_down = false;
+  
+  
   if(down) {
     if(key==XK_Escape)
       rfbCloseClient(cl);
-    else if(key==XK_q)
+    else if(key==XK_x)
       /* close down server, disconnecting clients */
       rfbShutdownServer(cl->screen,TRUE);
-  }
+    else if(key==XK_Control_L)
+      Control_down = TRUE;
+    else if((key==XK_Shift_L) || (key==XK_Shift_R))
+      Shift_down = TRUE;
+  } else {
+    if(key==XK_Control_L)
+      Control_down = false;
+    else if((key==XK_Shift_L) || (key==XK_Shift_R))
+      Shift_down = false;
+  }  
   
 
   /* Fake Mouse buttons */
-  if((key==XK_Control_L) || (key==XK_a))
+  if(Control_down && (key==XK_semicolon))
     risc_mouse_button(risc, 1, down);
-  else if((key==XK_Alt_L) || (key==XK_o))
+  else if(Control_down && (key==XK_q))
     risc_mouse_button(risc, 2, down);
-  else if((key==XK_Super_L) || (key==XK_e))
+  else if(Control_down && (key==XK_j))
     risc_mouse_button(risc, 3, down);
   else {
     uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
