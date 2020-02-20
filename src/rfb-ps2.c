@@ -23,7 +23,21 @@ static struct k_info rfb_keymap[128];
 
 int rfb_ps2_encode(rfbKeySym key, bool make, uint8_t out[static MAX_PS2_CODE_LEN]) {
   int i = 0;
-  struct k_info info = rfb_keymap[key];
+  struct k_info info;
+
+  if (key & 0xFF00) {
+    info.type = K_NORMAL;
+    if (key == XK_Return) 
+      info.code = 0x5A;
+    if (key == XK_Escape) 
+      info.code = 0x76;
+    if (key == XK_BackSpace)
+      info.code = 0x66;
+    if (key == XK_Tab)
+      info.code = 0x0D;
+  } else
+    info = rfb_keymap[key];
+
   switch (info.type) {
     case K_UNKNOWN: {
       break;
@@ -66,55 +80,52 @@ int rfb_ps2_encode(rfbKeySym key, bool make, uint8_t out[static MAX_PS2_CODE_LEN
       break;
     }
 
-//    case K_SHIFT_HACK: {
-//      SDL_Keymod mod = SDL_GetModState();
-//      if (make) {
-//        // fake shift release
-//        if (mod & KMOD_LSHIFT) {
-//          out[i++] = 0xE0;
-//          out[i++] = 0xF0;
-//          out[i++] = 0x12;
-//        }
-//        if (mod & KMOD_RSHIFT) {
-//          out[i++] = 0xE0;
-//          out[i++] = 0xF0;
-//          out[i++] = 0x59;
-//        }
-//        out[i++] = 0xE0;
-//        out[i++] = info.code;
-//      } else {
-//        out[i++] = 0xE0;
-//        out[i++] = 0xF0;
-//        out[i++] = info.code;
-//        // fake shift press
-//        if (mod & KMOD_RSHIFT) {
-//          out[i++] = 0xE0;
-//          out[i++] = 0x59;
-//        }
-//        if (mod & KMOD_LSHIFT) {
-//          out[i++] = 0xE0;
-//          out[i++] = 0x12;
-//        }
-//      }
-//      break;
-//    }
+    case K_SHIFT_HACK: {
+      if (make) {
+        // fake shift release
+        out[i++] = 0xE0;
+        out[i++] = 0xF0;
+        out[i++] = 0x12;
+        out[i++] = 0xE0;
+        out[i++] = info.code;
+      } else {
+        out[i++] = 0xE0;
+        out[i++] = 0xF0;
+        out[i++] = info.code;
+        out[i++] = 0xE0;
+        out[i++] = 0x59;
+      }
+      break;
+    }
   }
   return i;
 }
 
 static struct k_info rfb_keymap[128] = {
 
-  [XK_1] = { 0x16, K_NORMAL },
-  [XK_2] = { 0x1E, K_NORMAL },
-  [XK_3] = { 0x26, K_NORMAL },
-  [XK_4] = { 0x25, K_NORMAL },
-  [XK_5] = { 0x2E, K_NORMAL },
-  [XK_6] = { 0x36, K_NORMAL },
-  [XK_7] = { 0x3D, K_NORMAL },
-  [XK_8] = { 0x3E, K_NORMAL },
-  [XK_9] = { 0x46, K_NORMAL },
-  [XK_0] = { 0x45, K_NORMAL },
+  [XK_space]     = { 0x29, K_NORMAL },
+  
+  [XK_1] = { 0x16, K_SHIFT_HACK },
+  [XK_2] = { 0x1E, K_SHIFT_HACK },
+  [XK_3] = { 0x26, K_SHIFT_HACK },
+  [XK_4] = { 0x25, K_SHIFT_HACK },
+  [XK_5] = { 0x2E, K_SHIFT_HACK },
+  [XK_6] = { 0x36, K_SHIFT_HACK },
+  [XK_7] = { 0x3D, K_SHIFT_HACK },
+  [XK_8] = { 0x3E, K_SHIFT_HACK },
+  [XK_9] = { 0x46, K_SHIFT_HACK },
+  [XK_0] = { 0x45, K_SHIFT_HACK },
 
+  [XK_exclam]     = { 0x16, K_NORMAL },
+  [XK_at]         = { 0x1E, K_NORMAL },
+  [XK_numbersign] = { 0x26, K_NORMAL },
+  [XK_dollar]     = { 0x25, K_NORMAL },
+  [XK_percent]    = { 0x2E, K_NORMAL },
+  [XK_asciicircum] = { 0x36, K_NORMAL },
+  [XK_ampersand]  = { 0x3D, K_NORMAL },
+  [XK_asterisk]   = { 0x3E, K_NORMAL },
+  [XK_parenleft]  = { 0x46, K_NORMAL },
+  [XK_parenright] = { 0x45, K_NORMAL },
 
   [XK_A] = { 0x1C, K_NORMAL },
   [XK_B] = { 0x32, K_NORMAL },
@@ -143,53 +154,65 @@ static struct k_info rfb_keymap[128] = {
   [XK_Y] = { 0x35, K_NORMAL },
   [XK_Z] = { 0x1A, K_NORMAL },
 
-  [XK_a] = { 0x1C, K_NORMAL },
-  [XK_b] = { 0x32, K_NORMAL },
-  [XK_c] = { 0x21, K_NORMAL },
-  [XK_d] = { 0x23, K_NORMAL },
-  [XK_e] = { 0x24, K_NORMAL },
-  [XK_f] = { 0x2B, K_NORMAL },
-  [XK_g] = { 0x34, K_NORMAL },
-  [XK_h] = { 0x33, K_NORMAL },
-  [XK_i] = { 0x43, K_NORMAL },
-  [XK_j] = { 0x3B, K_NORMAL },
-  [XK_k] = { 0x42, K_NORMAL },
-  [XK_l] = { 0x4B, K_NORMAL },
-  [XK_m] = { 0x3A, K_NORMAL },
-  [XK_n] = { 0x31, K_NORMAL },
-  [XK_o] = { 0x44, K_NORMAL },
-  [XK_p] = { 0x4D, K_NORMAL },
-  [XK_q] = { 0x15, K_NORMAL },
-  [XK_r] = { 0x2D, K_NORMAL },
-  [XK_s] = { 0x1B, K_NORMAL },
-  [XK_t] = { 0x2C, K_NORMAL },
-  [XK_u] = { 0x3C, K_NORMAL },
-  [XK_v] = { 0x2A, K_NORMAL },
-  [XK_w] = { 0x1D, K_NORMAL },
-  [XK_x] = { 0x22, K_NORMAL },
-  [XK_y] = { 0x35, K_NORMAL },
-  [XK_z] = { 0x1A, K_NORMAL },
+  [XK_a] = { 0x1C, K_SHIFT_HACK },
+  [XK_b] = { 0x32, K_SHIFT_HACK },
+  [XK_c] = { 0x21, K_SHIFT_HACK },
+  [XK_d] = { 0x23, K_SHIFT_HACK },
+  [XK_e] = { 0x24, K_SHIFT_HACK },
+  [XK_f] = { 0x2B, K_SHIFT_HACK },
+  [XK_g] = { 0x34, K_SHIFT_HACK },
+  [XK_h] = { 0x33, K_SHIFT_HACK },
+  [XK_i] = { 0x43, K_SHIFT_HACK },
+  [XK_j] = { 0x3B, K_SHIFT_HACK },
+  [XK_k] = { 0x42, K_SHIFT_HACK },
+  [XK_l] = { 0x4B, K_SHIFT_HACK },
+  [XK_m] = { 0x3A, K_SHIFT_HACK },
+  [XK_n] = { 0x31, K_SHIFT_HACK },
+  [XK_o] = { 0x44, K_SHIFT_HACK },
+  [XK_p] = { 0x4D, K_SHIFT_HACK },
+  [XK_q] = { 0x15, K_SHIFT_HACK },
+  [XK_r] = { 0x2D, K_SHIFT_HACK },
+  [XK_s] = { 0x1B, K_SHIFT_HACK },
+  [XK_t] = { 0x2C, K_SHIFT_HACK },
+  [XK_u] = { 0x3C, K_SHIFT_HACK },
+  [XK_v] = { 0x2A, K_SHIFT_HACK },
+  [XK_w] = { 0x1D, K_SHIFT_HACK },
+  [XK_x] = { 0x22, K_SHIFT_HACK },
+  [XK_y] = { 0x35, K_SHIFT_HACK },
+  [XK_z] = { 0x1A, K_SHIFT_HACK },
 
+  [XK_quotedbl]     = { 0x52, K_NORMAL },
+  [XK_apostrophe]     = { 0x52, K_SHIFT_HACK},
+  
+  [XK_bar]          = { 0x5D, K_NORMAL },
+  [XK_backslash]    = { 0x5D, K_SHIFT_HACK },
 
-  // [XK_RETURN]    = { 0x5A, K_NORMAL },
-  // [XK_ESCAPE]    = { 0x76, K_NORMAL },
-  // [XK_BACKSPACE] = { 0x66, K_NORMAL },
-  // [XK_TAB]       = { 0x0D, K_NORMAL },
-  [XK_space]     = { 0x29, K_NORMAL },
+  [XK_underscore]   = { 0x4E, K_NORMAL },
+  [XK_minus]        = { 0x4E, K_SHIFT_HACK },
 
-  [XK_minus]        = { 0x4E, K_NORMAL },
-  [XK_equal]        = { 0x55, K_NORMAL },
-  //[XK_leftbracket]  = { 0x54, K_NORMAL },
-  //[XK_rightbracket] = { 0x5B, K_NORMAL },
-  [XK_backslash]    = { 0x5D, K_NORMAL },
-  // [XK__NONUSHASH]    = { 0x5D, K_NORMAL },  // same key as BACKSLASH
+  [XK_equal]        = { 0x55, K_SHIFT_HACK },
+  [XK_plus]         = { 0x55, K_NORMAL },
 
-  [XK_semicolon]  = { 0x4C, K_NORMAL },
-  [XK_apostrophe] = { 0x52, K_NORMAL },
-  //[XK_grave]      = { 0x0E, K_NORMAL },
-  [XK_comma]      = { 0x41, K_NORMAL },
-  [XK_period]     = { 0x49, K_NORMAL },
-  [XK_slash]      = { 0x4A, K_NORMAL },
+  [XK_braceleft]    = { 0x54, K_NORMAL },
+  [XK_bracketleft]  = { 0x54, K_SHIFT_HACK },
+  
+  [XK_braceright]   = { 0x5B, K_NORMAL },
+  [XK_bracketright] = { 0x5B, K_SHIFT_HACK },
+
+  [XK_colon]      = { 0x4C, K_NORMAL },
+  [XK_semicolon]  = { 0x4C, K_SHIFT_HACK },
+
+  [XK_grave]      = { 0x0E, K_SHIFT_HACK },
+  [XK_asciitilde] = { 0x0E, K_NORMAL },
+
+  [XK_comma]      = { 0x41, K_SHIFT_HACK },
+  [XK_less]       = { 0x41, K_NORMAL },
+  
+  [XK_period]     = { 0x49, K_SHIFT_HACK },
+  [XK_greater]    = { 0x49, K_NORMAL },
+  
+  [XK_slash]      = { 0x4A, K_SHIFT_HACK },
+  [XK_question]   = { 0x4A, K_NORMAL },
 
   // [XK__F1]  = { 0x05, K_NORMAL },
   // [XK__F2]  = { 0x06, K_NORMAL },
@@ -204,45 +227,4 @@ static struct k_info rfb_keymap[128] = {
   //[XK__F11] = { 0x78, K_NORMAL },
   //[XK__F12] = { 0x07, K_NORMAL },
 
-  // Most of the keys below are not used by Oberon
-
-  //[XK__INSERT]   = { 0x70, K_NUMLOCK_HACK },
-  //[XK__HOME]     = { 0x6C, K_NUMLOCK_HACK },
-  //[XK__PAGEUP]   = { 0x7D, K_NUMLOCK_HACK },
-  //[XK__DELETE]   = { 0x71, K_NUMLOCK_HACK },
-  //[XK__END]      = { 0x69, K_NUMLOCK_HACK },
-  //[XK__PAGEDOWN] = { 0x7A, K_NUMLOCK_HACK },
-  //[XK__RIGHT]    = { 0x74, K_NUMLOCK_HACK },
-  //[XK__LEFT]     = { 0x6B, K_NUMLOCK_HACK },
-  //[XK__DOWN]     = { 0x72, K_NUMLOCK_HACK },
-  //[XK__UP]       = { 0x75, K_NUMLOCK_HACK },
-
-  //[XK__KP_DIVIDE]   = { 0x4A, K_SHIFT_HACK },
-  //[XK__KP_MULTIPLY] = { 0x7C, K_NORMAL },
-  //[XK__KP_MINUS]    = { 0x7B, K_NORMAL },
-  //[XK__KP_PLUS]     = { 0x79, K_NORMAL },
-  //[XK__KP_ENTER]    = { 0x5A, K_EXTENDED },
-  //[XK__KP_1]        = { 0x69, K_NORMAL },
-  //[XK__KP_2]        = { 0x72, K_NORMAL },
-  //[XK__KP_3]        = { 0x7A, K_NORMAL },
-  //[XK__KP_4]        = { 0x6B, K_NORMAL },
-  //[XK__KP_5]        = { 0x73, K_NORMAL },
-  //[XK__KP_6]        = { 0x74, K_NORMAL },
-  //[XK__KP_7]        = { 0x6C, K_NORMAL },
-  //[XK__KP_8]        = { 0x75, K_NORMAL },
-  //[XK__KP_9]        = { 0x7D, K_NORMAL },
-  //[XK__KP_0]        = { 0x70, K_NORMAL },
-  //[XK__KP_PERIOD]   = { 0x71, K_NORMAL },
-
-  //[XK__NONUSBACKSLASH] = { 0x61, K_NORMAL },
-  //[XK__APPLICATION]    = { 0x2F, K_EXTENDED },
-
-  //[XK__LCTRL]  = { 0x14, K_NORMAL },
-  //[XK__LSHIFT] = { 0x12, K_NORMAL },
-  //[XK__LALT]   = { 0x11, K_NORMAL },
-  //[XK__LGUI]   = { 0x1F, K_EXTENDED },
-  //[XK__RCTRL]  = { 0x14, K_EXTENDED },
-  //[XK__RSHIFT] = { 0x59, K_NORMAL },
-  //[XK__RALT]   = { 0x11, K_EXTENDED },
-  //[XK__RGUI]   = { 0x27, K_EXTENDED },
 };

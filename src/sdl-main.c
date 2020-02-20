@@ -622,37 +622,47 @@ static void doptr(int buttonMask,int x,int y,rfbClientPtr cl)
 static void dokey(rfbBool down,rfbKeySym key,rfbClientPtr cl)
 {
   static bool Control_down = false;
-  static bool Shift_down = false;
+ 
+
+  if ((key==XK_Shift_L) || (key==XK_Shift_R))
+    return;
+
+  if ((key==XK_Control_L) || (key==XK_Control_R)) {
+    Control_down = down;
+    return;
+  }
   
-  
-  if(down) {
-    if(key==XK_Escape)
-      rfbCloseClient(cl);
-    else if(key==XK_x)
-      /* close down server, disconnecting clients */
-      rfbShutdownServer(cl->screen,TRUE);
-    else if(key==XK_Control_L)
-      Control_down = TRUE;
-    else if((key==XK_Shift_L) || (key==XK_Shift_R))
-      Shift_down = TRUE;
-  } else {
-    if(key==XK_Control_L)
-      Control_down = false;
-    else if((key==XK_Shift_L) || (key==XK_Shift_R))
-      Shift_down = false;
-  }  
+//  if(down) {
+//    if(key==XK_Escape)
+//      rfbCloseClient(cl);
+//    else if(key==XK_x)
+//      /* close down server, disconnecting clients */
+//      rfbShutdownServer(cl->screen,TRUE);
+//    else
+//     if(key==XK_Control_L)
+//       Control_down = true;
+//  } else {
+//     if(key==XK_Control_L)
+//       Control_down = false;
+//  }  
   
 
-  /* Fake Mouse buttons */
+  printf("char: %c key: 0x%x  down: 0x%x\n", key, key, down);
+  /* Fake Mouse buttons & other controls */
   if(Control_down && (key==XK_semicolon))
     risc_mouse_button(risc, 1, down);
   else if(Control_down && (key==XK_q))
     risc_mouse_button(risc, 2, down);
   else if(Control_down && (key==XK_j))
     risc_mouse_button(risc, 3, down);
+  else if(Control_down && (key==XK_x))
+    rfbShutdownServer(cl->screen,TRUE);
   else {
     uint8_t ps2_bytes[MAX_PS2_CODE_LEN];
     int len = rfb_ps2_encode(key, down, ps2_bytes);
+    //for (int i = 0; i < len; i++) 
+    //  printf("--> 0x%x, ", ps2_bytes[i]);
+    //printf("<--\n");
     risc_keyboard_input(risc, ps2_bytes, len);
   }
 }

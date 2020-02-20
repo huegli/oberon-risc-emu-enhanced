@@ -9,4 +9,5 @@
 
 int rfb_ps2_encode(rfbKeySym key, bool make, uint8_t out[static MAX_PS2_CODE_LEN]);
 
+
 #endif  // RFB_PS2_H
